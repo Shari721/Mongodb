@@ -17,6 +17,14 @@ var PORT = 3000;
 // Initialize Express
 var app = express();
 
+var exphbs = require("express-handlebars");
+
+app.engine("handlebars", exphbs({
+  defaultLayout: "main"
+}));
+app.set("view engine", "handlebars");
+
+
 // Configure middleware
 
 // Use morgan logger for logging requests
@@ -36,11 +44,26 @@ var MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost/mongoHeadlines
 // Connect to the Mongo DB
 mongoose.Promise = Promise;
 mongoose.connect(MONGODB_URI, {
-  useMongoClient: true
+  // useMongoClient: true
 });
 
 // Routes
-
+app.get("/", function (req, res) {
+  db.Article.find({}, null, {
+    sort: {
+      _id: -1
+    }
+  }, function (err, data) {
+    if (data.length === 0) {
+      res.render("starting", {
+        });
+    } else {
+      res.render("index", {
+        articles: data
+      });
+    }
+  });
+});
 // A GET route for scraping the echoJS website
 app.get("/scrape", function(req, res) {
   // First, we grab the body of the html with request
@@ -53,13 +76,20 @@ app.get("/scrape", function(req, res) {
       // Save an empty result object
       var result = {};
 
+
+ var link = 'https://www.washingtonpost.com' + $(element).find("a").attr("href");
+      var title = $(element).find("h2.hed").text().trim();
+      var summary = $(element).find("p.dek.has-dek").text().trim();
+      result.link = link;
+      result.title = title;
+      result.summary = summary;
       // Add the text and href of every link, and save them as properties of the result object
-      result.title = $(this)
-        .children("a")
-        .text();
-      result.link = $(this)
-        .children("a")
-        .attr("href");
+      // result.title = $(this)
+      //   .children("a")
+      //   .text();
+      // result.link = $(this)
+      //   .children("a")
+      //   .attr("href");
 
       // Create a new Article using the `result` object built from scraping
       db.Article.create(result)
@@ -73,9 +103,13 @@ app.get("/scrape", function(req, res) {
         });
     });
 
-    // If we were able to successfully scrape and save an Article, send a message to the client
-    res.send("Scrape Complete");
+    // // If we were able to successfully scrape and save an Article, send a message to the client
+    // res.send("Scrape Complete");
+
+    res.redirect("/");
+
   });
+
 });
 
 // Route for getting all Articles from the db
@@ -127,6 +161,51 @@ app.post("/articles/:id", function(req, res) {
       res.json(err);
     });
 });
+
+
+app.get("/saved", function (req, res) {
+  db.Article.find({
+    savedstatus: true
+  }, null, {
+    sort: {
+      _id: -1
+    }
+  }, function (err, data) {
+    if (data.length === 0) {
+      res.render("starter", {
+      });
+    } else {
+      res.render("saved", {
+        articles: data
+      });
+    }
+  });
+});
+
+app.post("/save/:id", function (req, res) {
+  db.Article.findById(req.params.id, function (err, data) {
+    db.Article.findByIdAndUpdate(req.params.id, {
+      $set: {
+        savedstatus: true
+      }
+    }, {
+      new: true
+    }, function (err, data) {
+      res.redirect("/");
+    });
+  });
+});
+
+app.post("/delete/:id", function (req, res) {
+  db.Article.findById(req.params.id, function (err, data) {
+    db.Article.findByIdAndRemove({
+      _id: req.params.id
+    }, function (err, data) {
+      res.redirect("/saved");
+    });
+  });
+});
+
 
 // Start the server
 app.listen(PORT, function() {
